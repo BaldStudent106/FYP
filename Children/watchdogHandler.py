@@ -1,10 +1,23 @@
+import configparser
 import time
 import socket
 import json
+import os
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-import os
-from encryptionhandler import asymmetric_encryption
+from encryptionhandler import asymmetric_encryption  # Assuming this handles encryption/decryption
+
+# Load the public key from the generated config file
+def load_public_key_from_ini():
+    config = configparser.ConfigParser()
+    config.read(os.path.join(os.path.dirname(__file__), "config.ini"))
+    
+    try:
+        public_key_str = config["Security"]["PublicKey"]
+        return asymmetric_encryption.load_public_key(public_key_str)
+    except KeyError as e:
+        print("Error reading public key from config file:", e)
+        return None
 
 class FileChangeHandler(FileSystemEventHandler):
     def __init__(self, pub_key, receiver_ip=None):
@@ -41,24 +54,23 @@ class FileChangeHandler(FileSystemEventHandler):
         encrypted_message = asymmetric_encryption.encrypt_message(log_info_json, self.pub_key)
 
         if self.receiver_ip:
-            # Send directly to the known receiver host
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
                 sock.sendto(encrypted_message, (self.receiver_ip, 37020))
             print(f"Sent log info to {self.receiver_ip}")
         else:
             print("No receiver host found. Broadcasting to find receiver.")
-            self.find_receiver_host()
+            self.find_receiver_host(encrypted_message)
 
-    def find_receiver_host(self):
-        # Broadcast a message to find the receiver
+    def find_receiver_host(self, encrypted_message):
+        # Broadcast to find receiver
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
             discovery_message = json.dumps({"message": "Request for receiving host"}).encode('utf-8')
             sock.sendto(discovery_message, ("<broadcast>", 37020))
 
-        # Listen for a response
+        # Listen for receiver response
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-            sock.bind(('', 37021))  # Bind to an arbitrary port to receive responses
+            sock.bind(('', 37021))
             sock.settimeout(5)
             try:
                 response, addr = sock.recvfrom(1024)
@@ -66,11 +78,19 @@ class FileChangeHandler(FileSystemEventHandler):
                 if response_data.get("response") == "Host available":
                     self.receiver_ip = addr[0]
                     print(f"Found receiver host at {self.receiver_ip}")
+                    # Send the previously encrypted message to the newly found host
+                    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+                        sock.sendto(encrypted_message, (self.receiver_ip, 37020))
             except socket.timeout:
                 print("No receiving host responded to the broadcast.")
 
+def monitor_directory_and_file(directory, filename):
+    pub_key = load_public_key_from_ini()  # Load the public key from config.ini
+    
+    if not pub_key:
+        print("Public key could not be loaded. Exiting.")
+        return
 
-def monitor_directory_and_file(directory, filename, pub_key):
     if not os.path.isdir(directory):
         print(f"Directory {directory} does not exist.")
         return
@@ -98,8 +118,3 @@ def monitor_directory_and_file(directory, filename, pub_key):
         observer.stop()
     
     observer.join()
-
-# Load or generate public key and start monitoring
-# (Code to load/generate key here, similar to previous examples)
-# ...
-
