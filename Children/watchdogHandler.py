@@ -5,12 +5,13 @@ import json
 import os
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-from encryptionhandler import asymmetric_encryption  # Assuming this handles encryption/decryption
+from cryptidy import asymmetric_encryption  # Assuming cryptidy handles encryption/decryption
 
-# Load the public key from the generated config file
+# Load the public key from the config file
 def load_public_key_from_ini():
     config = configparser.ConfigParser()
-    config.read(os.path.join(os.path.dirname(__file__), "config.ini"))
+    config_path = os.path.join(os.path.dirname(__file__), "config.ini")
+    config.read(config_path)
     
     try:
         public_key_str = config["Security"]["PublicKey"]
@@ -23,23 +24,21 @@ class FileChangeHandler(FileSystemEventHandler):
     def __init__(self, pub_key, receiver_ip=None):
         self.pub_key = pub_key
         self.receiver_ip = receiver_ip
+        self.device_name = socket.gethostname()  # Get the device name
 
     def on_modified(self, event):
-        if event.is_directory:
-            return
-        print(f"File modified: {event.src_path}")
-        self.send_log_info(event.src_path)
+        if not event.is_directory:
+            print(f"File modified: {event.src_path}")
+            self.send_log_info(event.src_path)
 
     def on_created(self, event):
-        if event.is_directory:
-            return
-        print(f"File created: {event.src_path}")
-        self.send_log_info(event.src_path)
+        if not event.is_directory:
+            print(f"File created: {event.src_path}")
+            self.send_log_info(event.src_path)
 
     def on_deleted(self, event):
-        if event.is_directory:
-            return
-        print(f"File deleted: {event.src_path}")
+        if not event.is_directory:
+            print(f"File deleted: {event.src_path}")
 
     def on_moved(self, event):
         print(f"File moved: {event.src_path} -> {event.dest_path}")
@@ -48,12 +47,14 @@ class FileChangeHandler(FileSystemEventHandler):
         log_info = {
             "message": "Log update",
             "file_path": file_path,
-            "timestamp": time.time()
+            "timestamp": time.time(),
+            "device_name": self.device_name  # Include device name
         }
         log_info_json = json.dumps(log_info)
         encrypted_message = asymmetric_encryption.encrypt_message(log_info_json, self.pub_key)
 
         if self.receiver_ip:
+            # Send directly to the known receiver host
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
                 sock.sendto(encrypted_message, (self.receiver_ip, 37020))
             print(f"Sent log info to {self.receiver_ip}")
@@ -62,13 +63,13 @@ class FileChangeHandler(FileSystemEventHandler):
             self.find_receiver_host(encrypted_message)
 
     def find_receiver_host(self, encrypted_message):
-        # Broadcast to find receiver
+        # Broadcast to find the receiver
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
             discovery_message = json.dumps({"message": "Request for receiving host"}).encode('utf-8')
             sock.sendto(discovery_message, ("<broadcast>", 37020))
 
-        # Listen for receiver response
+        # Listen for a response
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             sock.bind(('', 37021))
             sock.settimeout(5)
