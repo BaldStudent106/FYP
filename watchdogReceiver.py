@@ -3,7 +3,8 @@ import json
 from encryptionhandler import asymmetric_encryption
 
 # Load the private key for decryption
-private_key_path = 'C:\\Assignment\\FYP\\private_key.pem'
+base_dir = os.path.abspath(os.path.dirname(__file__))
+private_key_path = os.path.join(base_dir, 'private_key.pem')
 with open(private_key_path, 'rb') as f:
     priv_key = asymmetric_encryption.load_key(f.read(), key_type="private")
 

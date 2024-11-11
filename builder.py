@@ -111,15 +111,17 @@ class GenerateExePage:
             self.mainframe.rowconfigure(i, weight=1)
 
     def generate_exe(self):
-        source_script = 'C:\\Assignment\\FYP\\watchdogHandler.py'
-        dist_path = 'C:\\Assignment\\FYP\\dist'
-        build_path = 'C:\\Assignment\\FYP\\build'
-        spec_path = 'C:\\Assignment\\FYP\\spec'
-        output_dir = 'C:\\Assignment\\FYP\\output'
-        inno_script_path = 'C:\\Assignment\\FYP\\installer_script.iss'
-        inno_setup_path = 'C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe'
-        private_key_path = 'C:\\Assignment\\FYP\\private_key.pem'
-        public_key = None
+        base_dir = os.path.abspath(os.path.dirname(__file__))
+
+        # Define paths relative to the base directory
+        source_script = os.path.join(base_dir, 'watchdogHandler.py')
+        dist_path = os.path.join(base_dir, 'dist')
+        build_path = os.path.join(base_dir, 'build')
+        spec_path = os.path.join(base_dir, 'spec')
+        output_dir = os.path.join(base_dir, 'output')
+        inno_script_path = os.path.join(base_dir, 'installer_script.iss')
+        private_key_path = os.path.join(base_dir, 'private_key.pem')
+        public_key = None  # Initialize public_key to None 
 
         if os.path.exists(private_key_path):
             with open(private_key_path, 'rb') as f:
