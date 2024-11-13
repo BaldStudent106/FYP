@@ -4,6 +4,7 @@ import os
 import tkinter as tk
 from tkinter import ttk, filedialog
 from cryptidy import asymmetric_encryption
+from Cryptodome.PublicKey import RSA
 import json
 
 class WelcomePage:
@@ -114,8 +115,8 @@ class GenerateExePage:
         base_dir = os.path.abspath(os.path.dirname(__file__))
 
         # Define paths relative to the base directory
-        source_script = os.path.join(base_dir, 'watchdogHandler.py')
-        dist_path = os.path.join(base_dir, 'dist')
+        source_script = os.path.join(base_dir, '/Children/main.py')
+        dist_path = os.path.join(base_dir, '/Children')
         build_path = os.path.join(base_dir, 'build')
         spec_path = os.path.join(base_dir, 'spec')
         output_dir = os.path.join(base_dir, 'output')
@@ -125,16 +126,13 @@ class GenerateExePage:
 
         if os.path.exists(private_key_path):
             with open(private_key_path, 'rb') as f:
-                priv_key = asymmetric_encryption.load_key(f.read(), key_type="private")
-            pub_key = priv_key.public_key()
-            print("Loaded existing keys.")
+                priv_key = RSA.import_key(f.read())  # Corrected: Use RSA.import_key to load the private key
+            pub_key = priv_key.publickey()
+            print(pub_key)
         else:
             priv_key, pub_key = asymmetric_encryption.generate_keys(2048)
-            with open(private_key_path, 'wb') as f:
-                f.write(priv_key.save_key())
-            print("Generated and stored new key pair.")
-
-        public_key_str = pub_key.save_key().decode("utf-8").replace("\n", "\\n")
+            with open(private_key_path, 'w') as f:
+                f.write(priv_key)
 
         setup_script = f"""
         [Setup]
@@ -148,27 +146,27 @@ class GenerateExePage:
         SolidCompression=yes
 
         [Files]
-        Source: "{dist_path}\\watchdogHandler.exe"; DestDir: "{{app}}"; Flags: ignoreversion
+        Source: "C:\Assignment\FYP\Children\dist\main.exe"; DestDir: "{{app}}"; Flags: ignoreversion
 
         [Icons]
         Name: "{{group}}\\WatchdogHandler"; Filename: "{{app}}\\watchdogHandler.exe"
 
         [INI]
-        Filename: "{{app}}\\config.ini"; Section: "Security"; Key: "PublicKey"; String: "{public_key_str}"
+        Filename: "{{app}}\\config.ini"; Section: "Security"; Key: "PublicKey"; String: "{pub_key.export_key().decode('utf-8').replace('"', '\\"').replace('\n', '\\n')}"
         """
         
         with open(inno_script_path, "w") as f:
             f.write(setup_script)
         
+        inno_setup_path = "C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe"  # You may need to adjust the path to your Inno Setup compiler
         if os.path.exists(inno_setup_path):
             subprocess.call([inno_setup_path, inno_script_path])
-            print("Installer creation complete.")
         else:
             print("Inno Setup compiler not found. Please ensure Inno Setup is installed and the path is correct.")
 
         sample_data = ["foo", "bar", "some long string", 12]
-        encrypted = asymmetric_encryption.encrypt_message(sample_data, pub_key)
-        decrypted_data = asymmetric_encryption.decrypt_message(encrypted, priv_key)
+        encrypted = asymmetric_encryption.encrypt_message(sample_data, pub_key.export_key().decode('utf-8'))
+        decrypted_data = asymmetric_encryption.decrypt_message(encrypted, priv_key.export_key().decode('utf-8'))
 
         print("Data encrypted and decrypted successfully:", decrypted_data)
 

@@ -1,7 +1,8 @@
 import os;
 from encryptionhandler import *
 
-def createF_files(entries=decrypt_and_load_entries()):
+def createF_files():
+    entries=decrypt_and_load_entries()
     for entry in entries:
         # Retrieve directory, filename, and file type from each entry
         directory = entry.get('Directory')
@@ -32,5 +33,3 @@ def createF_files(entries=decrypt_and_load_entries()):
 
         print(f"Created {file_type} at: {file_path}")
 
-
-createF_files()

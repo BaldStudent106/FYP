@@ -10,6 +10,7 @@ tempentries = {}
 
 class WelcomePage:
     def __init__(self, root):
+        self.root=root
         # Frame and widgets for Welcome Page
         self.mainframe = ttk.Frame(root, padding="15 15 15 15")
         label = ttk.Label(self.mainframe, text="Welcome to HoneyDefense", font=("Helvetica", 16))
@@ -30,11 +31,12 @@ class WelcomePage:
 
     def next_page(self):
         self.mainframe.destroy()
-        AddFiles(root)
+        AddFiles(self.root)
 
 class AddFiles:
     def __init__(self, root):
         # Frame for AddFiles page
+        self.root = root
         self.mainframe = ttk.Frame(root, padding="15 15 15 15")
         self.mainframe.pack(expand=True, fill="both")
 
@@ -90,7 +92,7 @@ class AddFiles:
     def go_back(self):
         # Return to the WelcomePage
         self.mainframe.destroy()
-        WelcomePage(root)
+        WelcomePage(self.root)
 
     def add_another_file(self):
         # Save the current entry and reset fields for another file entry
@@ -117,11 +119,12 @@ class AddFiles:
         print("Entries:", entries)
         
         self.mainframe.destroy()
-        SummaryPage(root)
+        SummaryPage(self.root)
 
 class SummaryPage:
     def __init__(self, root):
         # Frame for SummaryPage
+        self.root = root
         self.mainframe = ttk.Frame(root, padding="15 15 15 15")
         self.mainframe.pack(expand=True, fill="both")
 
@@ -154,18 +157,19 @@ class SummaryPage:
     def back_to_add_files(self):
         # Go back to the AddFiles page
         self.mainframe.destroy()
-        AddFiles(root)
+        AddFiles(self.root)
 
     def encrypt_and_save(self):
         # Encrypt and store entries in binary file
         encrypt_and_store_entries(entries)
         print("Entries encrypted and saved.")
         self.mainframe.destroy()
-        WelcomePage(root)
+        self.root.destroy()
 
 # Main Application
-root = tk.Tk()
-root.title("HoneyDefense")
-root.geometry("600x600")
-WelcomePage(root)
-root.mainloop()
+def mainloop_starter():
+    root = tk.Tk()
+    root.title("HoneyDefense")
+    root.geometry("600x600")
+    WelcomePage(root)
+    root.mainloop()

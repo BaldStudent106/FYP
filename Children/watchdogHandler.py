@@ -6,16 +6,23 @@ import os
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from cryptidy import asymmetric_encryption  # Assuming cryptidy handles encryption/decryption
+from encryptionhandler import decrypt_and_load_entries
+import sys
+from Crypto.PublicKey import RSA
+from Crypto.IO import PEM
+import textwrap
 
 # Load the public key from the config file
 def load_public_key_from_ini():
     config = configparser.ConfigParser()
-    config_path = os.path.join(os.path.dirname(__file__), "config.ini")
+    config_path = os.path.join(os.path.dirname(sys.argv[0]), "config.ini")
     config.read(config_path)
     
     try:
         public_key_str = config["Security"]["PublicKey"]
-        return asymmetric_encryption.load_public_key(public_key_str)
+        return(textwrap.dedent(public_key_str.replace("\\n", "\n")))
+
+
     except KeyError as e:
         print("Error reading public key from config file:", e)
         return None
@@ -66,8 +73,10 @@ class FileChangeHandler(FileSystemEventHandler):
         # Broadcast to find the receiver
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            discovery_message = json.dumps({"message": "Request for receiving host"}).encode('utf-8')
-            sock.sendto(discovery_message, ("<broadcast>", 37020))
+            discovery_message = "Request for receiving host"  # Plain string instead of JSON
+            sock.sendto(discovery_message.encode('utf-8'), ("<broadcast>", 37020))  # Send the string as bytes
+
+       
 
         # Listen for a response
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
@@ -85,31 +94,43 @@ class FileChangeHandler(FileSystemEventHandler):
             except socket.timeout:
                 print("No receiving host responded to the broadcast.")
 
-def monitor_directory_and_file(directory, filename):
+def monitor_directories_and_files():
+    entries = decrypt_and_load_entries()
     pub_key = load_public_key_from_ini()  # Load the public key from config.ini
     
     if not pub_key:
         print("Public key could not be loaded. Exiting.")
         return
 
-    if not os.path.isdir(directory):
-        print(f"Directory {directory} does not exist.")
-        return
-    
-    file_to_watch = os.path.join(directory, filename)
-    
-    if not os.path.exists(file_to_watch):
-        print(f"The file {file_to_watch} does not exist.")
-        return
-
-    event_handler = FileChangeHandler(pub_key)
     observer = Observer()
-    
-    observer.schedule(event_handler, directory, recursive=False)
-    observer.schedule(event_handler, file_to_watch, recursive=False)
-    
-    print(f"Monitoring directory: {directory} and file: {file_to_watch}")
 
+    for entry in entries:
+        directory = entry.get("Directory")
+        filename = entry.get("FileName")
+
+        if not directory or not filename:
+            print("Directory or filename missing in entry.")
+            continue
+        
+        if not os.path.isdir(directory):
+            print(f"Directory {directory} does not exist.")
+            continue
+        
+        file_to_watch = os.path.join(directory, filename)
+        
+        if not os.path.exists(file_to_watch):
+            print(f"The file {file_to_watch} :wadoes not exist.")
+            continue
+
+        event_handler = FileChangeHandler(pub_key)
+        
+        # Schedule monitoring for both the directory and the specific file
+        observer.schedule(event_handler, directory, recursive=False)
+        observer.schedule(event_handler, file_to_watch, recursive=False)
+        
+        print(f"Monitoring directory: {directory} and file: {file_to_watch}")
+
+    # Start observer to monitor all entries
     observer.start()
 
     try:
