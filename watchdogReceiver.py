@@ -3,6 +3,7 @@ import json
 import socket
 from cryptidy import asymmetric_encryption  # Assuming cryptidy handles encryption/decryption
 import time
+from zeroconf import ServiceInfo, Zeroconf
 from Cryptodome.PublicKey import RSA
 
 # Path to store logs
@@ -30,35 +31,53 @@ def save_log(device_name, log_info):
         json.dump(log_info, log_file, indent=4)
     print(f"Log saved for device '{device_name}' at {file_path}")
 
-def start_udp_server():
+def get_local_ip():
+    """Returns the local IP address of the server."""
+    hostname = socket.gethostname()
+    local_ip = socket.gethostbyname(hostname)
+    print(f"Local IP for mDNS registration: {local_ip}")
+    return local_ip
+
+def load_private_key():
+    """Load the private key for decryption (you must implement this)."""
+    pass
+
+def save_log(device_name, log_info):
+    """Logic to save or process the log information."""
+    pass
+
+def start_mdns_server():
+    """Starts the mDNS server, registers the service, and listens for UDP messages."""
     private_key = load_private_key()
+    zeroconf = Zeroconf()
+    service_type = "_logserver._udp.local."
+    service_name = "LogServer._logserver._udp.local."
+    service_port = 37020
 
-    # Set up UDP socket to listen for incoming messages on port 37020
+    # Get the local IP address of the server
+    local_ip = get_local_ip()
+
+    # Register the service with mDNS using the actual IP address
+    service_info = ServiceInfo(
+        service_type,
+        service_name,
+        addresses=[socket.inet_aton(local_ip)],
+        port=service_port,
+        properties={"message": "Host available"},
+        server="LogServer.local.",
+    )
+
+    zeroconf.register_service(service_info)
+    print(f"mDNS Service registered as LogServer on {local_ip}:{service_port}")
+
+    # Set up UDP socket to listen for incoming messages on the local IP
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as server_socket:
-        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        server_socket.bind(('0.0.0.0', 37020))  # Bind to port 37020 for log messages
-        print("Server listening on port 37020...")
+        server_socket.bind((local_ip, service_port))
+        print(f"Server listening for encrypted log messages on {local_ip}:{service_port}...")
 
-        while True:
-            try:
-                # Receive a discovery request (from the send_log_info function)
-                discovery_message, addr = server_socket.recvfrom(4096)
-                print(f"Received discovery request from {addr}")
-
-                # Decode the discovery request message
-                discovery_data = json.loads(discovery_message.decode('utf-8'))
-
-                if discovery_data.get("message") == "Request for receiving host":
-                    print(f"Discovery request received from {addr}, responding with host availability.")
-
-                    # Respond with "Host available" message
-                    response_data = {"response": "Host available"}
-                    response_message = json.dumps(response_data).encode('utf-8')
-
-                    # Send the response back to the sender (the client who discovered the host)
-                    server_socket.sendto(response_message, addr)
-
-                # Now listen for an encrypted log message
+        try:
+            while True:
+                # Receive encrypted log messages
                 encrypted_message, addr = server_socket.recvfrom(4096)
                 print(f"Received encrypted log message from {addr}")
 
@@ -74,7 +93,14 @@ def start_udp_server():
                 
                 save_log(device_name, log_info)
 
-            except:
-                pass
+        except Exception as e:
+            print(f"Error occurred: {e}")
 
-start_udp_server()
+        finally:
+            # Unregister mDNS service and close Zeroconf
+            zeroconf.unregister_service(service_info)
+            zeroconf.close()
+            print("mDNS Service unregistered.")
+
+# Start the mDNS server
+start_mdns_server()

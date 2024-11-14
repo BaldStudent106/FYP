@@ -1,22 +1,57 @@
 import socket
+import json
+from zeroconf import ServiceBrowser, Zeroconf
 
-# Replace with the server's IP and port
-server_ip = "127.0.0.1"
-server_port = 37020
+class LogServerListener:
+    def __init__(self):
+        self.server_address = None
 
-# Create a UDP socket
-client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    def add_service(self, zeroconf, service_type, name):
+        """Callback method when a new service is discovered."""
+        info = zeroconf.get_service_info(service_type, name)
+        if info:
+            server_ip = socket.inet_ntoa(info.addresses[0])
+            server_port = info.port
+            self.server_address = (server_ip, server_port)
+            print(f"Discovered LogServer at {server_ip}:{server_port}")
 
-# Send a test message
-message = "Test message"
-client_socket.sendto(message.encode('utf-8'), (server_ip, server_port))
+    def update_service(self, zeroconf, service_type, name):
+        """Required update_service method, can be empty if updates are not needed."""
+        pass
 
-# Receive response (if any)
-client_socket.settimeout(2)  # Wait for a response for 2 seconds
-try:
-    response, addr = client_socket.recvfrom(4096)
-    print(f"Received response from {addr}: {response.decode('utf-8')}")
-except socket.timeout:
-    print(f"No response from server {server_ip}:{server_port}")
+    def get_server_address(self):
+        return self.server_address
 
-client_socket.close()
+def send_test_message():
+    """Sends a test message to the discovered server."""
+    zeroconf = Zeroconf()
+    listener = LogServerListener()
+
+    # Browse for the LogServer service on mDNS
+    ServiceBrowser(zeroconf, "_logserver._udp.local.", listener)
+    
+    try:
+        # Wait for service discovery to complete
+        import time
+        time.sleep(2)  # Adjust this time if necessary for discovery
+
+        # Get the server address discovered via mDNS
+        server_address = listener.get_server_address()
+        if server_address is None:
+            print("LogServer service not found.")
+            return
+        
+        # Create a UDP socket to send a test message
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client_socket:
+            test_message = {"device_name": "Test_Client", "message": "This is a test message", "timestamp": "2024-11-14T10:00:00"}
+            encrypted_message = json.dumps(test_message).encode('utf-8')  # Modify if encryption is required
+
+            # Send the test message to the server
+            client_socket.sendto(encrypted_message, server_address)
+            print(f"Test message sent to {server_address}")
+    
+    finally:
+        zeroconf.close()
+
+# Run the test message function
+send_test_message()
